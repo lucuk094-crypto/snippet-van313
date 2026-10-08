@@ -1,6 +1,6 @@
 # SnippetVault — Van313 | Official
 
-Perpustakaan snippet kode dengan pencarian, kategori/bahasa, favorit, tambah snippet, salin/unduh/bagikan, tampilan detail, serta terminal **validasi statis**. Dibangun dengan React + Vite, ikon Lucide, dan siap di-build/deploy ke Vercel.
+Perpustakaan snippet kode dengan pencarian, kategori/bahasa, favorit, tambah snippet, salin/unduh/bagikan, halaman detail, dokumentasi REST API publik, live API playground, dan preflight kode statis. Dibangun dengan React + Vite, ikon Lucide, serta siap di-build/deploy ke Vercel.
 
 ## Jalankan lokal
 
@@ -16,30 +16,43 @@ npm run build
 npm run preview
 ```
 
+Buka halaman API docs di `/api-doc`.
+
 ## Deploy ke Vercel
 
 1. Push project ke GitHub.
 2. Di Vercel, pilih **Add New → Project** lalu import repo.
 3. Framework preset: **Vite** (atau biarkan auto-detect). Build command `npm run build`, output directory `dist`.
-4. Deploy. Fungsi di `api/` tersedia sebagai Vercel Functions (`/api/health` dan `/api/check`).
+4. Deploy. Fungsi di `api/` tersedia sebagai Vercel Functions.
 
-Tidak ada API key yang diperlukan untuk demo ini.
+Tidak ada API key yang dibutuhkan untuk API snippet publik.
+
+## REST API publik
+
+Semua endpoint read-only, JSON, dan mengizinkan CORS:
+
+- `GET /api/v1/snippets?q=fetch&category=API&language=javascript&tag=api&limit=10&offset=0`
+- `GET /api/v1/snippets/:slug`
+- `GET /api/health`
+- `POST /api/check` — preflight statis kode; bukan runtime execution.
+
+Endpoint daftar menyaring judul/deskripsi/slug/tag serta mendukung filter kategori, bahasa, tag, pagination (maksimal `limit=50`). Endpoint detail menyertakan source code. API awal mengembalikan enam snippet demo terkurasi dari `src/data.js`.
 
 ## Fitur
 
 - Cari snippet menurut judul, deskripsi, bahasa, tag, atau kategori.
-- Filter kategori, sort terbaru/populer, bookmark/favorit.
+- Filter kategori dan bahasa, sort terbaru/populer, bookmark/favorit.
 - Tambah snippet dengan judul, bahasa, tag, source URL, dan kode.
-- Detail snippet dengan highlight, copy, download, share URL, dan pemeriksaan di terminal.
+- Detail snippet dengan syntax highlighting, copy, download, dan share URL.
+- Halaman `/api-doc` bergaya mobile-first seperti API reference, contoh cURL, tombol salin, live request tester (hasil HTTP/JSON dan TRUE/FALSE), dan pemeriksaan kode statis real-time.
 - Tema terang/gelap, desain responsif, akses keyboard dasar.
-- Data contoh ditulis untuk demo dan tidak di-scrape dari situs pihak ketiga.
 
 ## Penyimpanan
 
-Tanpa konfigurasi database, snippet dan favorit baru disimpan di `localStorage` browser. Artinya, data itu hanya terlihat pada browser/perangkat yang menyimpannya. Untuk katalog bersama yang persisten bagi semua pengunjung, hubungkan Supabase/Postgres atau database lain, lalu tambahkan autentikasi dan kebijakan akses sebelum membuka fitur publikasi.
+Tanpa konfigurasi database, snippet dan favorit baru disimpan di `localStorage` browser. Artinya, data itu hanya terlihat pada browser/perangkat yang menyimpannya. API publik hanya membaca seed snippets di `src/data.js`. Untuk katalog bersama berisi data impor/scrape yang berizin, hubungkan Supabase/Postgres atau database lain, lalu tambahkan autentikasi dan kebijakan akses sebelum publikasi.
 
 ## Terminal & keamanan
 
-Terminal hanya melakukan **preflight statis**: memeriksa apakah kode tersedia, mencoba parse-only untuk JavaScript non-module, mencari placeholder umum, dan memberi peringatan pola berisiko. Snippet **tidak pernah dieksekusi** di browser/server. Status "Lolos preflight" bukan jaminan bahwa kode aktif di runtime atau layanan eksternal.
+Terminal dan halaman API docs hanya melakukan **preflight statis**: memeriksa apakah source tersedia, mencoba parse-only untuk JavaScript sederhana/module, mencari placeholder umum, dan memberi peringatan pola berisiko. Snippet **tidak pernah dieksekusi** di browser/server. Status `TRUE` berarti lolos preflight awal, bukan jaminan kode aktif di runtime atau layanan eksternal.
 
-Jika mengimpor snippet dari internet, cantumkan sumber dan lisensinya. Hindari scraper yang melewati proteksi situs; gunakan API resmi/izin pemilik sumber.
+Jika mengimpor snippet dari internet, cantumkan sumber dan lisensinya. Hindari scraper yang melewati proteksi situs; gunakan API resmi atau izin pemilik sumber.

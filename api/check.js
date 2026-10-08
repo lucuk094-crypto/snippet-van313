@@ -8,8 +8,16 @@ const RISK_PATTERNS = [
   { label: 'Destructive shell command', re: /\brm\s+-rf\b|\bsudo\s+/i },
 ];
 
-function moduleOrTyped(language, code) {
-  return /typescript|tsx|ts/i.test(language) || /(^|\n)\s*(import|export)\b/m.test(code);
+function isTyped(language) {
+  return /typescript|tsx|\bts\b/i.test(language);
+}
+
+function stripSimpleModuleSyntax(code) {
+  return code
+    .replace(/^\s*import\s+.*?;?\s*$/gm, '')
+    .replace(/^\s*export\s+default\s+/gm, '')
+    .replace(/^\s*export\s+(?=(?:async\s+)?(?:function|class|const|let|var)\b)/gm, '')
+    .replace(/^\s*export\s+\{[^}]*\}\s*;?\s*$/gm, '');
 }
 
 function check(code, language) {
@@ -30,12 +38,12 @@ function check(code, language) {
   const isJs = /javascript|js|jsx/i.test(language);
   let syntax = { label: 'Parser', status: 'limited', detail: 'Validasi sintaks otomatis terbatas untuk bahasa ini.' };
   if (isJs) {
-    if (moduleOrTyped(language, clean)) {
-      syntax = { label: 'Parser', status: 'limited', detail: 'Kode module/import-export dilewati; tidak dieksekusi.' };
+    if (isTyped(language) || /jsx/i.test(language)) {
+      syntax = { label: 'Parser', status: 'limited', detail: 'TypeScript/JSX perlu parser khusus; lakukan tinjau manual.' };
     } else {
       try {
-        // vm.Script compiles JavaScript for syntax only. It never runs the snippet.
-        new vm.Script(clean, { filename: 'snippet-check.js' });
+        // Strip only common module declarations, then compile syntax without execution.
+        new vm.Script(stripSimpleModuleSyntax(clean), { filename: 'snippet-check.js' });
         syntax = { label: 'Sintaks JS', status: 'pass', detail: 'Lolos parse-only check; runtime tidak dijalankan.' };
       } catch (error) {
         syntax = { label: 'Sintaks JS', status: 'fail', detail: error.message.split('\n')[0] };
@@ -61,7 +69,7 @@ function check(code, language) {
   const syntaxFailed = syntax.status === 'fail';
   const hasRisk = risks.length > 0;
   const needsSetup = Boolean(placeholders);
-  const state = syntaxFailed || hasRisk ? 'review' : needsSetup ? 'setup' : 'ready';
+  const state = syntaxFailed || hasRisk || syntax.status === 'limited' ? 'review' : needsSetup ? 'setup' : 'ready';
   const label = state === 'ready' ? 'Lolos preflight' : state === 'setup' ? 'Konfigurasi dibutuhkan' : 'Perlu ditinjau';
 
   return {
