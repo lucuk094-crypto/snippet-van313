@@ -996,10 +996,14 @@ function App() {
                 <div><span className="guide-label">SAFE WORKFLOW</span><h3>Periksa sebelum pakai.</h3><p>Jalankan <code>check &lt;id&gt;</code> untuk preflight statis. Uji runtime hanya di sandbox milikmu.</p></div>
                 <button onClick={() => { setView('terminal'); document.getElementById('terminal-panel')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }} aria-label="Lihat terminal"><ArrowUpRight size={16} /></button>
               </div>
-              <div className="source-note-card">
-                <div className="source-note-head"><div className="source-note-icon"><BookOpen size={16} /></div><span>ETIKA KURASI</span></div>
-                <p>Impor manual, catat sumber, dan hormati lisensi. Jangan lewati proteksi anti-bot tanpa izin.</p>
-                <a href="https://pixabay.com/api/docs/" target="_blank" rel="noreferrer">API resmi Pixabay <ExternalLink size={13} /></a>
+              <div className="source-note-card pastebin-source-card">
+                <div className="source-note-head"><div className="source-note-icon"><FileCode2 size={16} /></div><span>PASTEBIN DATA SOURCE</span></div>
+                <h3>Doa harian</h3>
+                <p>Sumber data teks/JSON dari Pastebin. Buka halaman paste atau lihat feed raw-nya.</p>
+                <div className="pastebin-source-actions">
+                  <a href="https://pastebin.com/Na8nqXWh" target="_blank" rel="noreferrer">Buka paste <ExternalLink size={12} /></a>
+                  <a href="https://pastebin.com/raw/Na8nqXWh" target="_blank" rel="noreferrer">Raw data <ArrowRight size={12} /></a>
+                </div>
               </div>
             </aside>
           </div>

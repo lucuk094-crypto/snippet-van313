@@ -364,6 +364,9 @@ a { color: inherit; }
 .source-note-card p { margin: 9px 0 10px; color: var(--muted); font-size: 9px; line-height: 1.55; }
 .source-note-card a { display: inline-flex; align-items: center; gap: 5px; color: var(--accent); font-size: 9px; font-weight: 600; text-decoration: none; }
 .source-note-card a:hover { text-decoration: underline; }
+.source-note-card h3 { margin: 8px 0 0; color: var(--ink-soft); font-size: 11px; letter-spacing: -.02em; }
+.pastebin-source-actions { display: flex; flex-wrap: wrap; gap: 12px; }
+.pastebin-source-actions a { min-height: 25px; }
 
 .page-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 26px; padding-top: 12px; border-top: 1px solid var(--line); color: var(--muted-2); font-size: 8px; }
 .page-footer b { color: var(--muted); font-weight: 600; }
