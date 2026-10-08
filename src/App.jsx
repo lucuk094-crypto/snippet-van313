@@ -5,6 +5,7 @@ import {
   ArrowRight,
   ArrowUpRight,
   Bookmark,
+  BookOpen,
   Check,
   CheckCircle2,
   ChevronDown,
