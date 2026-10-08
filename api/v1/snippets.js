@@ -24,6 +24,7 @@ function asPublicSnippet(snippet) {
     sourceUrl: snippet.sourceUrl || null,
     author: snippet.author || 'Van313 | Official',
     updatedAt: new Date(Number(snippet.createdAt || Date.now())).toISOString(),
+    ...(snippet.apiPreview ? { apiPreview: { type: snippet.apiPreview.type, method: snippet.apiPreview.method, endpoint: snippet.apiPreview.endpoint } } : {}),
     codeLines: String(snippet.code || '').split('\n').length,
   };
 }
@@ -49,7 +50,7 @@ export default function handler(req, res) {
   const offset = Number.isFinite(parsedOffset) ? Math.max(0, parsedOffset) : 0;
 
   const matching = STARTER_SNIPPETS.filter((snippet) => {
-    const text = normalize(`${snippet.title} ${snippet.description} ${snippet.id} ${(snippet.tags || []).join(' ')}`);
+    const text = normalize(`${snippet.title} ${snippet.description} ${snippet.id} ${snippet.apiPreview?.type || ''} ${snippet.apiPreview?.endpoint || ''} ${(snippet.tags || []).join(' ')}`);
     const categoryMatch = !category || normalize(snippet.category) === category;
     const languageMatch = !language || normalize(snippet.language) === language;
     const tagMatch = !tag || (snippet.tags || []).some((item) => normalize(item) === tag);

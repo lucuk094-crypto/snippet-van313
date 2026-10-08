@@ -13,6 +13,7 @@ import {
   Code2,
   Copy,
   Download,
+  Eye,
   ExternalLink,
   FileCode2,
   FolderOpen,
@@ -41,6 +42,7 @@ import json from 'highlight.js/lib/languages/json';
 import './styles.css';
 import { STARTER_SNIPPETS, CATEGORIES, LANGUAGES, LANG_INFO } from './data.js';
 import ApiDocs from './ApiDocs.jsx';
+import ApiEndpointPreview from './ApiEndpointPreview.jsx';
 
 hljs.registerLanguage('javascript', javascript);
 hljs.registerLanguage('typescript', typescript);
@@ -51,6 +53,7 @@ hljs.registerLanguage('json', json);
 const STORAGE_KEY = 'snippetvault-van313-snippets-v1';
 const FAVORITES_KEY = 'snippetvault-van313-favorites-v1';
 const THEME_KEY = 'snippetvault-van313-theme-v1';
+const API_TYPE_FILTERS = ['Semua endpoint', 'Anime / Otakudesu', 'AI / Claude', 'AIO', 'Music', 'Lainnya'];
 
 const PLACEHOLDER_RE = /\b(TODO|FIXME|YOUR[_ -]?API[_ -]?KEY|YOUR[_ -]?TOKEN|REPLACE[_ -]?ME|CHANGE[_ -]?ME|process\.env\.[A-Z0-9_]+)\b/i;
 const RISK_PATTERNS = [
@@ -137,7 +140,10 @@ function readSnippets() {
     const saved = window.localStorage.getItem(STORAGE_KEY);
     if (!saved) return STARTER_SNIPPETS;
     const parsed = JSON.parse(saved);
-    return Array.isArray(parsed) && parsed.length ? parsed : STARTER_SNIPPETS;
+    if (!Array.isArray(parsed) || !parsed.length) return STARTER_SNIPPETS;
+    const savedIds = new Set(parsed.map((item) => item.id));
+    const missingStarters = STARTER_SNIPPETS.filter((item) => !savedIds.has(item.id));
+    return [...missingStarters, ...parsed];
   } catch {
     return STARTER_SNIPPETS;
   }
@@ -203,12 +209,14 @@ function ReadinessBadge({ result }) {
 
 function SnippetCard({ snippet, favorite, onFavorite, onOpen, onCopy }) {
   const readiness = analyzeSnippet(snippet);
+  const apiPreview = snippet.apiPreview;
   return (
-    <article className="snippet-card">
+    <article className={`snippet-card ${apiPreview ? 'snippet-card-api' : ''}`}>
       <div className="card-topline">
         <div className="card-badges">
           <span className="category-pill"><Layers size={12} />{snippet.category}</span>
           <LanguageMark language={snippet.language} />
+          {apiPreview && <span className="api-type-chip">{apiPreview.type}</span>}
         </div>
         <button className={`icon-button favorite-button ${favorite ? 'is-favorite' : ''}`} aria-label={favorite ? 'Hapus dari tersimpan' : 'Simpan snippet'} onClick={() => onFavorite(snippet.id)}>
           <Heart size={17} fill={favorite ? 'currentColor' : 'none'} strokeWidth={1.8} />
@@ -220,6 +228,7 @@ function SnippetCard({ snippet, favorite, onFavorite, onOpen, onCopy }) {
         <ArrowUpRight className="title-arrow" size={16} />
       </button>
       <p className="card-description">{snippet.description}</p>
+      {apiPreview && <div className="api-card-endpoint"><span>{apiPreview.method}</span><code title={apiPreview.endpoint}>{apiPreview.endpoint}</code></div>}
       <div className="card-code-wrap"><CodeBlock code={snippet.code} language={snippet.language} compact /></div>
 
       <div className="tag-row">
@@ -234,6 +243,7 @@ function SnippetCard({ snippet, favorite, onFavorite, onOpen, onCopy }) {
         </div>
         <div className="card-actions">
           <span className="download-count" title="Jumlah salinan contoh"><Download size={13} />{snippet.downloads || 0}</span>
+          {apiPreview && <button className="api-card-preview" aria-label={`Preview API ${snippet.title}`} onClick={() => onOpen(snippet)}><Eye size={13} /><span>Preview API</span></button>}
           <button className="card-copy" aria-label="Salin kode" onClick={() => onCopy(snippet)}><Copy size={14} /><span>Salin</span></button>
         </div>
       </div>
@@ -435,27 +445,105 @@ function TerminalPanel({ snippets, onOpenSnippet, onSearch }) {
   );
 }
 
-function AddSnippetModal({ onClose, onSave }) {
-  const [form, setForm] = useState({ title: '', description: '', language: 'JavaScript', category: 'Utility', tags: '', sourceUrl: '', code: '' });
+function AddSnippetModal({ onClose, onSave, initialKind = 'code' }) {
+  const [form, setForm] = useState(() => ({
+    kind: initialKind,
+    title: '',
+    description: '',
+    language: 'JavaScript',
+    category: initialKind === 'api' ? 'API' : 'Utility',
+    tags: '',
+    sourceUrl: '',
+    code: '',
+    apiType: 'Anime / Otakudesu',
+    method: 'GET',
+    endpoint: '',
+    sampleResponse: '',
+    requestBody: '',
+  }));
   const [error, setError] = useState('');
   const update = (key) => (event) => setForm((current) => ({ ...current, [key]: event.target.value }));
+  const changeKind = (event) => {
+    const kind = event.target.value;
+    setForm((current) => ({ ...current, kind, category: kind === 'api' ? 'API' : (current.category === 'API' ? 'Utility' : current.category) }));
+    setError('');
+  };
 
   const submit = (event) => {
     event.preventDefault();
-    if (!form.title.trim() || !form.code.trim()) {
-      setError('Judul dan kode wajib diisi.');
+    if (!form.title.trim()) {
+      setError('Judul wajib diisi.');
       return;
     }
+
+    let apiPreview = null;
+    let code = form.code.trim();
+    let language = form.language;
+    let category = form.category;
+    let sourceUrl = form.sourceUrl.trim();
+    let description = form.description.trim() || 'Snippet baru dari koleksi Van313.';
+
+    if (form.kind === 'api') {
+      let endpoint;
+      try {
+        endpoint = new URL(form.endpoint.trim());
+        if (!['https:', 'http:'].includes(endpoint.protocol)) throw new Error('Gunakan URL HTTP/HTTPS.');
+      } catch (parseError) {
+        setError(parseError.message || 'Masukkan URL endpoint yang valid.');
+        return;
+      }
+      if (!form.sampleResponse.trim()) {
+        setError('Tempel sample response JSON agar preview tetap tersedia saat CORS membatasi request live.');
+        return;
+      }
+      let sampleResponse;
+      try {
+        sampleResponse = JSON.parse(form.sampleResponse);
+      } catch (parseError) {
+        setError(`Sample response bukan JSON valid: ${parseError.message}`);
+        return;
+      }
+      let requestBody;
+      if (form.method !== 'GET' && form.requestBody.trim()) {
+        try { requestBody = JSON.parse(form.requestBody); }
+        catch (parseError) {
+          setError(`Request body bukan JSON valid: ${parseError.message}`);
+          return;
+        }
+      }
+      const endpointLiteral = JSON.stringify(endpoint.toString());
+      const methodLiteral = JSON.stringify(form.method);
+      const bodyOption = requestBody === undefined ? '' : `, body: JSON.stringify(${JSON.stringify(requestBody, null, 2)})`;
+      code = `async function callApi() {\n  const response = await fetch(${endpointLiteral}, { method: ${methodLiteral}${bodyOption} });\n  if (!response.ok) throw new Error("HTTP " + response.status);\n  return response.json();\n}`;
+      language = 'JavaScript';
+      category = 'API';
+      sourceUrl = sourceUrl || endpoint.toString();
+      description = description === 'Snippet baru dari koleksi Van313.' ? `Endpoint ${form.apiType} · ${form.method}. Klik Preview API untuk melihat sample atau mencoba request live.` : description;
+      apiPreview = {
+        type: form.apiType,
+        method: form.method,
+        endpoint: endpoint.toString(),
+        sampleResponse,
+        ...(requestBody === undefined ? {} : { requestBody: JSON.stringify(requestBody, null, 2) }),
+      };
+    } else if (!code) {
+      setError('Tempel kode yang akan disimpan.');
+      return;
+    }
+
     const base = slugify(form.title);
+    const tags = form.tags.split(',').map((tag) => tag.trim().replace(/^#/, '')).filter(Boolean).slice(0, 8);
+    if (apiPreview && !tags.some((tag) => tag.toLowerCase() === 'api')) tags.unshift('api');
     const snippet = {
       id: `${base}-${Date.now().toString(36).slice(-4)}`,
       title: form.title.trim(),
-      description: form.description.trim() || 'Snippet baru dari koleksi Van313.',
-      language: form.language,
-      category: form.category,
-      tags: form.tags.split(',').map((tag) => tag.trim().replace(/^#/, '')).filter(Boolean).slice(0, 8),
-      sourceUrl: form.sourceUrl.trim(),
-      code: form.code,
+      description,
+      language,
+      category,
+      tags,
+      ...(apiPreview ? { apiPreview } : {}),
+      sourceUrl,
+      code,
       author: 'Van313 | Official',
       downloads: 0,
       createdAt: Date.now(),
@@ -467,32 +555,63 @@ function AddSnippetModal({ onClose, onSave }) {
     <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <section className="form-modal" role="dialog" aria-modal="true" aria-labelledby="add-modal-title">
         <div className="modal-heading-row">
-          <div><span className="modal-kicker">KOLEKSI ANDA</span><h2 id="add-modal-title">Tambah snippet</h2><p>Tambahkan kode, tag, dan sumbernya. Data demo disimpan di browser ini.</p></div>
+          <div><span className="modal-kicker">KOLEKSI ANDA</span><h2 id="add-modal-title">{form.kind === 'api' ? 'Tambah API endpoint' : 'Tambah snippet'}</h2><p>API endpoint disimpan lokal dan mendapat preview sample + request live dari browser.</p></div>
           <button className="icon-button" onClick={onClose} aria-label="Tutup"><X size={18} /></button>
         </div>
         <form className="snippet-form" onSubmit={submit}>
+          <label>Jenis item
+            <select value={form.kind} onChange={changeKind}>
+              <option value="code">Snippet kode</option>
+              <option value="api">API endpoint · dengan preview</option>
+            </select>
+          </label>
           <div className="form-grid two-col">
-            <label>Judul <input autoFocus value={form.title} onChange={update('title')} placeholder="Contoh: debounce function" maxLength={80} /></label>
-            <label>Bahasa
+            <label>Judul <input autoFocus value={form.title} onChange={update('title')} placeholder={form.kind === 'api' ? 'Contoh: Anime search API' : 'Contoh: debounce function'} maxLength={80} /></label>
+            {form.kind === 'code' && <label>Bahasa
               <select value={form.language} onChange={update('language')}>
                 {LANGUAGES.filter((language) => language !== 'Semua bahasa').map((language) => <option key={language}>{language}</option>)}
               </select>
-            </label>
+            </label>}
           </div>
-          <label>Deskripsi <input value={form.description} onChange={update('description')} placeholder="Apa yang dilakukan snippet ini?" maxLength={180} /></label>
-          <div className="form-grid two-col">
-            <label>Kategori
-              <select value={form.category} onChange={update('category')}>
-                {CATEGORIES.filter((category) => category !== 'Semua').map((category) => <option key={category}>{category}</option>)}
-              </select>
-            </label>
-            <label>Tag <input value={form.tags} onChange={update('tags')} placeholder="api, utility, fetch" /></label>
-          </div>
-          <label>Sumber / referensi <input type="url" value={form.sourceUrl} onChange={update('sourceUrl')} placeholder="https://... (opsional, cantumkan lisensi/izin)" /></label>
-          <label>Kode <textarea className="form-code-input" value={form.code} onChange={update('code')} placeholder="Tempel snippet di sini…" rows={9} spellCheck="false" /></label>
-          <div className="form-footnote"><ShieldCheck size={14} /> Terminal hanya melakukan preflight statis. Kode yang ditempel tidak akan dieksekusi.</div>
+          <label>Deskripsi <input value={form.description} onChange={update('description')} placeholder={form.kind === 'api' ? 'Apa yang dikembalikan endpoint ini?' : 'Apa yang dilakukan snippet ini?'} maxLength={180} /></label>
+
+          {form.kind === 'api' ? (
+            <>
+              <div className="form-grid two-col">
+                <label>Jenis API
+                  <select value={form.apiType} onChange={update('apiType')}>
+                    <option>Anime / Otakudesu</option><option>AI / Claude</option><option>AIO</option><option>Music</option><option>Lainnya</option>
+                  </select>
+                </label>
+                <label>Method
+                  <select value={form.method} onChange={update('method')}>
+                    <option>GET</option><option>POST</option><option>PUT</option><option>DELETE</option>
+                  </select>
+                </label>
+              </div>
+              <label>Endpoint URL <input type="url" required value={form.endpoint} onChange={update('endpoint')} placeholder="https://api.example.com/search?q=..." /></label>
+              {form.method !== 'GET' && <label>Request body (JSON, opsional) <textarea className="form-code-input" value={form.requestBody} onChange={update('requestBody')} placeholder={'{\n  "prompt": "..."\n}'} rows={4} spellCheck="false" /></label>}
+              <label>Sample response JSON <textarea className="form-code-input" required value={form.sampleResponse} onChange={update('sampleResponse')} placeholder={'{\n  "success": true,\n  "data": { "results": [] }\n}'} rows={8} spellCheck="false" /></label>
+              <div className="form-footnote"><ShieldCheck size={14} />Jangan taruh API key di URL atau sample JSON. Header preview hanya sementara; CORS bisa membatasi request live.</div>
+            </>
+          ) : (
+            <>
+              <div className="form-grid two-col">
+                <label>Kategori
+                  <select value={form.category} onChange={update('category')}>
+                    {CATEGORIES.filter((category) => category !== 'Semua').map((category) => <option key={category}>{category}</option>)}
+                  </select>
+                </label>
+                <label>Tag <input value={form.tags} onChange={update('tags')} placeholder="api, utility, fetch" /></label>
+              </div>
+            </>
+          )}
+          {form.kind === 'api' && <label>Tag <input value={form.tags} onChange={update('tags')} placeholder="anime, otakudesu, music, claude" /></label>}
+          <label>Sumber / referensi <input type="url" value={form.sourceUrl} onChange={update('sourceUrl')} placeholder="https://... (opsional)" /></label>
+          {form.kind === 'code' && <label>Kode <textarea className="form-code-input" value={form.code} onChange={update('code')} placeholder="Tempel snippet di sini…" rows={9} spellCheck="false" /></label>}
+          {form.kind === 'code' && <div className="form-footnote"><ShieldCheck size={14} />Terminal hanya melakukan preflight statis. Kode yang ditempel tidak akan dieksekusi.</div>}
           {error && <div className="form-error">{error}</div>}
-          <div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>Batal</button><button className="primary-button" type="submit"><Plus size={16} /> Simpan snippet</button></div>
+          <div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>Batal</button><button className="primary-button" type="submit"><Plus size={16} />{form.kind === 'api' ? 'Simpan endpoint' : 'Simpan snippet'}</button></div>
         </form>
       </section>
     </div>
@@ -521,6 +640,7 @@ function DetailModal({ snippet, onClose, onCopy, onDownload, onShare, onToast })
             <p className="detail-description">{snippet.description}</p>
             <div className="detail-code-topline"><div className="file-label"><FileCode2 size={15} /><span>{snippet.id}.{(LANG_INFO[snippet.language] || { ext: 'txt' }).ext}</span></div><div className="code-tools"><button onClick={() => onCopy(snippet)}><Copy size={14} />Salin</button><button onClick={() => onDownload(snippet)}><Download size={14} />Unduh</button></div></div>
             <CodeBlock code={snippet.code} language={snippet.language} />
+            {snippet.apiPreview && <ApiEndpointPreview key={snippet.id} apiPreview={snippet.apiPreview} />}
             <div className="detail-bottom-actions"><button className="secondary-button" onClick={() => onShare(snippet)}><Share2 size={15} />Bagikan tautan</button><span className="detail-caution"><ShieldCheck size={14} />Tidak dieksekusi oleh situs</span></div>
           </main>
           <aside className="detail-aside">
@@ -553,6 +673,8 @@ function App() {
   const [theme, setTheme] = useState(() => typeof window !== 'undefined' ? window.localStorage.getItem(THEME_KEY) || 'light' : 'light');
   const [view, setView] = useState('explore');
   const [query, setQuery] = useState('');
+  const [activeApiType, setActiveApiType] = useState('Semua endpoint');
+  const [addKind, setAddKind] = useState('code');
   const [activeCategory, setActiveCategory] = useState('Semua');
   const [activeLanguage, setActiveLanguage] = useState('Semua bahasa');
   const [sort, setSort] = useState('newest');
@@ -603,14 +725,17 @@ function App() {
   const filteredSnippets = useMemo(() => {
     const searchTerm = query.trim().toLowerCase();
     const result = snippets.filter((snippet) => {
-      const categoryMatch = activeCategory === 'Semua' || snippet.category === activeCategory;
-      const languageMatch = activeLanguage === 'Semua bahasa' || snippet.language === activeLanguage;
+      const apiView = view === 'apis';
+      const categoryMatch = apiView || activeCategory === 'Semua' || snippet.category === activeCategory;
+      const languageMatch = apiView || activeLanguage === 'Semua bahasa' || snippet.language === activeLanguage;
+      const apiMatch = !apiView || Boolean(snippet.apiPreview);
+      const apiTypeMatch = !apiView || activeApiType === 'Semua endpoint' || snippet.apiPreview?.type === activeApiType;
       const savedMatch = view !== 'saved' || favorites.includes(snippet.id);
-      const searchable = `${snippet.title} ${snippet.description} ${snippet.language} ${snippet.category} ${(snippet.tags || []).join(' ')} ${snippet.id}`.toLowerCase();
-      return categoryMatch && languageMatch && savedMatch && (!searchTerm || searchable.includes(searchTerm));
+      const searchable = `${snippet.title} ${snippet.description} ${snippet.language} ${snippet.category} ${snippet.apiPreview?.type || ''} ${snippet.apiPreview?.endpoint || ''} ${(snippet.tags || []).join(' ')} ${snippet.id}`.toLowerCase();
+      return categoryMatch && languageMatch && apiMatch && apiTypeMatch && savedMatch && (!searchTerm || searchable.includes(searchTerm));
     });
     return result.sort((a, b) => sort === 'popular' ? (b.downloads || 0) - (a.downloads || 0) : Number(b.createdAt || 0) - Number(a.createdAt || 0));
-  }, [snippets, activeCategory, activeLanguage, favorites, query, sort, view]);
+  }, [snippets, activeCategory, activeLanguage, activeApiType, favorites, query, sort, view]);
 
   const openSnippet = (snippet) => {
     setSelectedId(snippet.id);
@@ -677,24 +802,31 @@ function App() {
   const saveSnippet = (snippet) => {
     setSnippets((current) => [snippet, ...current]);
     setAddOpen(false);
-    setView('explore');
+    setView(snippet.apiPreview ? 'apis' : 'explore');
     setActiveCategory('Semua');
     setActiveLanguage('Semua bahasa');
+    setActiveApiType('Semua endpoint');
     setQuery('');
-    showToast('Snippet ditambahkan. Tersimpan di browser ini.');
+    showToast(snippet.apiPreview ? 'API endpoint ditambahkan ke koleksi lokal.' : 'Snippet ditambahkan. Tersimpan di browser ini.');
+  };
+
+  const openAddSnippet = (kind = 'code') => {
+    setAddKind(kind);
+    setAddOpen(true);
   };
 
   const chooseView = (newView) => {
     setView(newView);
-    if (newView === 'explore') {
+    if (newView === 'explore' || newView === 'apis') {
       setActiveCategory('Semua');
       setActiveLanguage('Semua bahasa');
     }
+    if (newView === 'apis') setActiveApiType('Semua endpoint');
     setMobileNavOpen(false);
     if (newView === 'terminal') window.setTimeout(() => document.getElementById('terminal-panel')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 40);
   };
 
-  const title = view === 'saved' ? 'Snippet tersimpan' : activeCategory === 'Semua' ? 'Koleksi terbaru' : `Koleksi ${activeCategory}`;
+  const title = view === 'apis' ? 'Endpoint API' : view === 'saved' ? 'Snippet tersimpan' : activeCategory === 'Semua' ? 'Koleksi terbaru' : `Koleksi ${activeCategory}`;
 
   const openApiDocs = () => {
     window.history.pushState({}, '', '/api-doc');
@@ -707,7 +839,7 @@ function App() {
   };
 
   if (route === '/api-doc' || route === '/api-doc/') {
-    return <ApiDocs snippets={snippets} onHome={returnHome} onAddSnippet={() => { returnHome(); setAddOpen(true); }} />;
+    return <ApiDocs snippets={snippets} onHome={returnHome} onAddSnippet={() => { returnHome(); openAddSnippet('code'); }} />;
   }
 
   return (
@@ -725,10 +857,11 @@ function App() {
           <button className={`nav-item ${view === 'explore' ? 'active' : ''}`} onClick={() => chooseView('explore')}><Code2 size={17} /><span>Jelajahi</span><span className="nav-count">{snippets.length}</span></button>
           <button className={`nav-item ${view === 'saved' ? 'active' : ''}`} onClick={() => chooseView('saved')}><Bookmark size={17} /><span>Tersimpan</span><span className="nav-count">{favorites.length}</span></button>
           <button className={`nav-item ${view === 'terminal' ? 'active' : ''}`} onClick={() => chooseView('terminal')}><Terminal size={17} /><span>Terminal status</span><span className="nav-live" /></button>
-          <button className="nav-item" onClick={openApiDocs}><Plug size={17} /><span>API Publik</span><ArrowUpRight size={13} className="api-nav-arrow" /></button>
+          <button className={`nav-item ${view === 'apis' ? 'active' : ''}`} onClick={() => chooseView('apis')}><Plug size={17} /><span>Endpoint API</span><span className="nav-count">{snippets.filter((snippet) => snippet.apiPreview).length}</span></button>
+          <button className="nav-item" onClick={openApiDocs}><BookOpen size={17} /><span>Dokumentasi API</span><ArrowUpRight size={13} className="api-nav-arrow" /></button>
         </nav>
 
-        <div className="sidebar-section-label category-label">KATEGORI <button aria-label="Tambah snippet" onClick={() => setAddOpen(true)}><Plus size={14} /></button></div>
+        <div className="sidebar-section-label category-label">KATEGORI <button aria-label="Tambah snippet" onClick={() => openAddSnippet('code')}><Plus size={14} /></button></div>
         <nav className="sidebar-nav category-nav" aria-label="Kategori">
           {CATEGORIES.filter((category) => category !== 'Semua').map((category, index) => {
             const count = snippets.filter((snippet) => snippet.category === category).length;
@@ -752,7 +885,7 @@ function App() {
       <div className="main-shell">
         <header className="topbar">
           <button className="icon-button mobile-menu-button" aria-label="Buka navigasi" onClick={() => setMobileNavOpen(true)}><Menu size={20} /></button>
-          <div className="breadcrumb"><span>Workspace</span><b>/</b><strong>{view === 'saved' ? 'Tersimpan' : view === 'terminal' ? 'Terminal status' : 'Koleksi kode'}</strong></div>
+          <div className="breadcrumb"><span>Workspace</span><b>/</b><strong>{view === 'saved' ? 'Tersimpan' : view === 'terminal' ? 'Terminal status' : view === 'apis' ? 'Endpoint API' : 'Koleksi kode'}</strong></div>
           <div className="topbar-actions">
             <label className="global-search">
               <Search size={17} />
@@ -760,7 +893,7 @@ function App() {
               <kbd>⌘ K</kbd>
             </label>
             <button className="icon-button theme-toggle" aria-label={theme === 'dark' ? 'Aktifkan tema terang' : 'Aktifkan tema gelap'} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}</button>
-            <button className="top-add-button" onClick={() => setAddOpen(true)}><Plus size={16} /><span>Tambah snippet</span></button>
+            <button className="top-add-button" onClick={() => openAddSnippet(view === 'apis' ? 'api' : 'code')}><Plus size={16} /><span>{view === 'apis' ? 'Tambah endpoint' : 'Tambah snippet'}</span></button>
           </div>
         </header>
 
@@ -772,7 +905,7 @@ function App() {
               <p>Potongan kode terkurasi, tersusun rapi, dan siap jadi titik awal proyekmu berikutnya.</p>
               <div className="hero-buttons">
                 <button className="hero-primary" onClick={() => { chooseView('explore'); document.getElementById('library-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}><span>Jelajahi koleksi</span><ArrowRight size={16} /></button>
-                <button className="hero-secondary" onClick={() => setAddOpen(true)}><Plus size={15} />Tambah snippet</button>
+                <button className="hero-secondary" onClick={() => openAddSnippet(view === 'apis' ? 'api' : 'code')}><Plus size={15} />{view === 'apis' ? 'Tambah endpoint' : 'Tambah snippet'}</button>
               </div>
               <div className="hero-stats">
                 <div><strong>{snippets.length.toString().padStart(2, '0')}</strong><span>snippet</span></div>
@@ -806,17 +939,23 @@ function App() {
                 <div>
                   <div className="section-eyebrow"><FolderOpen size={13} /> YOUR LIBRARY</div>
                   <h2>{title}<span className="result-count">{filteredSnippets.length}</span></h2>
-                  <p>{view === 'saved' ? 'Koleksi kecil yang Anda tandai untuk nanti.' : 'Temukan solusi ringkas, lalu adaptasikan sesuai kebutuhan.'}</p>
+                  <p>{view === 'apis' ? 'Kumpulan endpoint siap dites. Simpan sample JSON, coba request live, dan lihat hasilnya.' : view === 'saved' ? 'Koleksi kecil yang Anda tandai untuk nanti.' : 'Temukan solusi ringkas, lalu adaptasikan sesuai kebutuhan.'}</p>
                 </div>
-                <button className="filter-button" onClick={() => document.getElementById('language-filter')?.focus()}><SlidersHorizontal size={15} /><span>Filter</span><ChevronDown size={14} /></button>
+                <button className="filter-button" onClick={() => document.getElementById(view === 'apis' ? 'api-type-filter' : 'language-filter')?.focus()}><SlidersHorizontal size={15} /><span>Filter</span><ChevronDown size={14} /></button>
               </div>
 
-              <div className="filter-toolbar">
-                <div className="category-tabs" role="tablist" aria-label="Filter kategori">
-                  {CATEGORIES.map((category) => <button role="tab" aria-selected={activeCategory === category} className={activeCategory === category ? 'selected' : ''} key={category} onClick={() => { setActiveCategory(category); setView('explore'); }}>{category}</button>)}
-                </div>
+              <div className={`filter-toolbar ${view === 'apis' ? 'filter-toolbar-api' : ''}`}>
+                {view === 'apis' ? (
+                  <div className="category-tabs api-type-tabs" role="tablist" aria-label="Filter jenis API">
+                    {API_TYPE_FILTERS.map((type) => <button id={type === 'Semua endpoint' ? 'api-type-filter' : undefined} role="tab" aria-selected={activeApiType === type} className={activeApiType === type ? 'selected' : ''} key={type} onClick={() => setActiveApiType(type)}>{type}</button>)}
+                  </div>
+                ) : (
+                  <div className="category-tabs" role="tablist" aria-label="Filter kategori">
+                    {CATEGORIES.map((category) => <button role="tab" aria-selected={activeCategory === category} className={activeCategory === category ? 'selected' : ''} key={category} onClick={() => { setActiveCategory(category); setView('explore'); }}>{category}</button>)}
+                  </div>
+                )}
                 <div className="filter-selects">
-                  <label className="select-wrap"><span className="sr-only">Filter bahasa</span><select id="language-filter" value={activeLanguage} onChange={(event) => setActiveLanguage(event.target.value)}>{LANGUAGES.map((language) => <option key={language}>{language}</option>)}</select><ChevronDown size={13} /></label>
+                  {view !== 'apis' && <label className="select-wrap"><span className="sr-only">Filter bahasa</span><select id="language-filter" value={activeLanguage} onChange={(event) => setActiveLanguage(event.target.value)}>{LANGUAGES.map((language) => <option key={language}>{language}</option>)}</select><ChevronDown size={13} /></label>}
                   <label className="select-wrap sort-select"><span className="sr-only">Urutkan</span><select value={sort} onChange={(event) => setSort(event.target.value)}><option value="newest">Terbaru</option><option value="popular">Populer</option></select><ChevronDown size={13} /></label>
                 </div>
               </div>
@@ -828,13 +967,13 @@ function App() {
               ) : (
                 <div className="empty-state">
                   <div className="empty-icon"><Search size={22} /></div>
-                  <h3>{view === 'saved' ? 'Belum ada snippet tersimpan' : 'Belum ada hasil yang cocok'}</h3>
-                  <p>{view === 'saved' ? 'Tekan ikon hati pada snippet untuk menyimpannya di sini.' : 'Coba kata kunci lain atau bersihkan filter kategori dan bahasa.'}</p>
-                  <button className="secondary-button" onClick={() => { setQuery(''); setActiveCategory('Semua'); setActiveLanguage('Semua bahasa'); setView('explore'); }}>Reset filter</button>
+                  <h3>{view === 'apis' ? 'Belum ada endpoint di kategori ini' : view === 'saved' ? 'Belum ada snippet tersimpan' : 'Belum ada hasil yang cocok'}</h3>
+                  <p>{view === 'apis' ? 'Tambahkan URL endpoint beserta sample JSON untuk membuat preview yang bisa dites.' : view === 'saved' ? 'Tekan ikon hati pada snippet untuk menyimpannya di sini.' : 'Coba kata kunci lain atau bersihkan filter kategori dan bahasa.'}</p>
+                  {view === 'apis' ? <button className="secondary-button" onClick={() => openAddSnippet('api')}><Plus size={14} />Tambah endpoint</button> : <button className="secondary-button" onClick={() => { setQuery(''); setActiveCategory('Semua'); setActiveLanguage('Semua bahasa'); setView('explore'); }}>Reset filter</button>}
                 </div>
               )}
 
-              <div className="library-footnote"><ShieldCheck size={14} /><span>Snippet contoh dibuat untuk demo. Selalu tinjau kode, sumber, dan lisensi sebelum digunakan.</span></div>
+              <div className="library-footnote"><ShieldCheck size={14} /><span>{view === 'apis' ? 'Live preview dipanggil langsung dari browser dan bergantung pada izin CORS endpoint. Sample response hanya contoh, bukan hasil live.' : 'Snippet contoh dibuat untuk demo. Selalu tinjau kode, sumber, dan lisensi sebelum digunakan.'}</span></div>
             </section>
 
             <aside className="right-rail">
@@ -856,7 +995,7 @@ function App() {
         </main>
       </div>
 
-      {addOpen && <AddSnippetModal onClose={() => setAddOpen(false)} onSave={saveSnippet} />}
+      {addOpen && <AddSnippetModal onClose={() => setAddOpen(false)} onSave={saveSnippet} initialKind={addKind} />}
       {selectedSnippet && <DetailModal snippet={selectedSnippet} onClose={closeDetail} onCopy={copyCode} onDownload={downloadCode} onShare={shareSnippet} onToast={showToast} />}
       {toast && <div className="toast-message" role="status"><span className="toast-icon"><Check size={15} /></span>{toast}</div>}
     </div>

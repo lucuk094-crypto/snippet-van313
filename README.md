@@ -44,12 +44,14 @@ Endpoint daftar menyaring judul/deskripsi/slug/tag serta mendukung filter katego
 - Filter kategori dan bahasa, sort terbaru/populer, bookmark/favorit.
 - Tambah snippet dengan judul, bahasa, tag, source URL, dan kode.
 - Detail snippet dengan syntax highlighting, copy, download, dan share URL.
+- Workspace **Endpoint API**: filter Anime/Otakudesu, AI/Claude, AIO, Music, atau lainnya; tambahkan URL, method, request body, dan sample response JSON.
+- Setiap endpoint punya panel preview: sample JSON tetap bisa dilihat, tombol request live menampilkan HTTP status/JSON, dan `data.results` dirender sebagai kartu hasil bila ada.
 - Halaman `/api-doc` bergaya mobile-first seperti API reference, contoh cURL, tombol salin, live request tester (hasil HTTP/JSON dan TRUE/FALSE), dan pemeriksaan kode statis real-time.
 - Tema terang/gelap, desain responsif, akses keyboard dasar.
 
 ## Penyimpanan
 
-Tanpa konfigurasi database, snippet dan favorit baru disimpan di `localStorage` browser. Artinya, data itu hanya terlihat pada browser/perangkat yang menyimpannya. API publik hanya membaca seed snippets di `src/data.js`. Untuk katalog bersama berisi data impor/scrape yang berizin, hubungkan Supabase/Postgres atau database lain, lalu tambahkan autentikasi dan kebijakan akses sebelum publikasi.
+Tanpa konfigurasi database, snippet, endpoint API, dan favorit baru disimpan di `localStorage` browser. Artinya, data itu hanya terlihat pada browser/perangkat yang menyimpannya. API publik hanya membaca seed snippets di `src/data.js`. Untuk katalog bersama berisi data impor/scrape yang berizin, hubungkan Supabase/Postgres atau database lain, lalu tambahkan autentikasi dan kebijakan akses sebelum publikasi. Header/kunci yang dimasukkan di panel preview hanya berada di memori halaman saat itu, tidak disimpan ke koleksi.
 
 ## Terminal & keamanan
 

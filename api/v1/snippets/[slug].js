@@ -43,6 +43,7 @@ export default function handler(req, res) {
       author: snippet.author || 'Van313 | Official',
       updatedAt: new Date(Number(snippet.createdAt || Date.now())).toISOString(),
       downloads: snippet.downloads || 0,
+      ...(snippet.apiPreview ? { apiPreview: snippet.apiPreview } : {}),
       code: snippet.code || '',
     },
   });

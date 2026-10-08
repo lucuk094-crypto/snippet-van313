@@ -43,6 +43,7 @@ function toPublicSnippet(snippet, includeCode = false) {
     sourceUrl: snippet.sourceUrl || null,
     author: snippet.author || 'Van313 | Official',
     updatedAt: new Date(Number(snippet.createdAt || Date.now())).toISOString(),
+    ...(snippet.apiPreview ? { apiPreview: includeCode ? snippet.apiPreview : { type: snippet.apiPreview.type, method: snippet.apiPreview.method, endpoint: snippet.apiPreview.endpoint } } : {}),
     ...(includeCode ? { code: snippet.code || '' } : { codeLines: String(snippet.code || '').split('\n').length }),
   };
   return record;
@@ -59,7 +60,7 @@ function makeLocalResponse(path, snippets) {
     const max = Math.min(50, Math.max(1, Number.parseInt(url.searchParams.get('limit') || '10', 10) || 10));
     const offset = Math.max(0, Number.parseInt(url.searchParams.get('offset') || '0', 10) || 0);
     const matching = snippets.filter((item) => {
-      const text = `${item.title} ${item.description} ${item.id} ${(item.tags || []).join(' ')}`.toLowerCase();
+      const text = `${item.title} ${item.description} ${item.id} ${item.apiPreview?.type || ''} ${item.apiPreview?.endpoint || ''} ${(item.tags || []).join(' ')}`.toLowerCase();
       return (!q || text.includes(q))
         && (!category || item.category.toLowerCase() === category)
         && (!language || item.language.toLowerCase() === language)

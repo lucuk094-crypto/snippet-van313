@@ -27,6 +27,57 @@ export const STARTER_SNIPPETS = [
     createdAt: Date.now() - 1000 * 60 * 28,
   },
   {
+    id: 'nexadev-anime-search',
+    title: 'Anime search · Nexadev API',
+    description: 'Cari anime subtitle Indonesia dan lihat kartu hasil, HTTP status, serta respons JSON langsung dari endpoint.',
+    language: 'JavaScript',
+    category: 'API',
+    apiPreview: {
+      type: 'Anime / Otakudesu',
+      method: 'GET',
+      endpoint: 'https://apii.nexadev.my.id/anime?search=one%20piece',
+      sampleResponse: {
+        success: true,
+        status: 200,
+        author: 'Nexadev',
+        source: 'Animekuindo',
+        message: 'OK',
+        data: {
+          query: 'one piece',
+          total: 2,
+          debug: { usedSelector: '.bsx' },
+          results: [
+            {
+              title: 'One Piece Subtitle Indonesia\t\t\t\tOne Piece Subtitle Indonesia',
+              link: 'https://s2.anime-kuindo.com/anime/one-piece-subtitle-indonesia/',
+              image: 'https://i0.wp.com/s2.anime-kuindo.com/wp-content/uploads/2025/08/anime-one-piece-1741848758475.jpeg?resize=247,350',
+              type: 'TV',
+              latestEpisode: 'Ongoing',
+            },
+            {
+              title: 'One Piece: Gyojin Tou-hen Subtitle Indonesia\t\t\t\tOne Piece: Gyojin Tou-hen Subtitle Indonesia',
+              link: 'https://s2.anime-kuindo.com/anime/one-piece-gyojin-tou-hen-subtitle-indonesia/',
+              image: 'https://i1.wp.com/s2.anime-kuindo.com/wp-content/uploads/2025/02/1739679894-1803-146063.jpg?resize=247,350',
+              type: 'TV',
+              latestEpisode: 'Completed',
+            },
+          ],
+        },
+      },
+    },
+    tags: ['anime', 'otakudesu', 'endpoint', 'json', 'preview'],
+    code: `async function searchAnime() {
+  const endpoint = "https://apii.nexadev.my.id/anime?search=one%20piece";
+  const response = await fetch(endpoint);
+  if (!response.ok) throw new Error("HTTP " + response.status);
+  return response.json();
+}`,
+    sourceUrl: 'https://apii.nexadev.my.id/anime?search=one%20piece',
+    author: 'Van313 | Official',
+    downloads: 0,
+    createdAt: Date.now() - 1000 * 60 * 8,
+  },
+  {
     id: 'debounce-function',
     title: 'Debounce function',
     description: 'Menunda pemanggilan callback sampai input berhenti berubah—berguna untuk pencarian dan event resize.',
