@@ -4,6 +4,8 @@
   "installCommand": "npm install",
   "rewrites": [
     { "source": "/api-doc", "destination": "/index.html" },
-    { "source": "/api-doc/", "destination": "/index.html" }
+    { "source": "/api-doc/", "destination": "/index.html" },
+    { "source": "/admin", "destination": "/index.html" },
+    { "source": "/admin/", "destination": "/index.html" }
   ]
 }

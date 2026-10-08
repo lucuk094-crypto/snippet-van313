@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Activity,
   AlertTriangle,
@@ -40,9 +40,11 @@ import python from 'highlight.js/lib/languages/python';
 import bash from 'highlight.js/lib/languages/bash';
 import json from 'highlight.js/lib/languages/json';
 import './styles.css';
+import './route-loading.css';
 import { STARTER_SNIPPETS, CATEGORIES, LANGUAGES, LANG_INFO } from './data.js';
-import ApiDocs from './ApiDocs.jsx';
 import ApiEndpointPreview from './ApiEndpointPreview.jsx';
+const EndpointPortal = lazy(() => import('./EndpointPortal.jsx'));
+const AdminDashboard = lazy(() => import('./AdminDashboard.jsx'));
 
 hljs.registerLanguage('javascript', javascript);
 hljs.registerLanguage('typescript', typescript);
@@ -141,9 +143,11 @@ function readSnippets() {
     if (!saved) return STARTER_SNIPPETS;
     const parsed = JSON.parse(saved);
     if (!Array.isArray(parsed) || !parsed.length) return STARTER_SNIPPETS;
-    const savedIds = new Set(parsed.map((item) => item.id));
+    // One-time cleanup: remove the old local API endpoint examples as requested.
+    const cleaned = parsed.filter((item) => item.category !== 'API' && !item.apiPreview);
+    const savedIds = new Set(cleaned.map((item) => item.id));
     const missingStarters = STARTER_SNIPPETS.filter((item) => !savedIds.has(item.id));
-    return [...missingStarters, ...parsed];
+    return [...missingStarters, ...cleaned];
   } catch {
     return STARTER_SNIPPETS;
   }
@@ -816,6 +820,7 @@ function App() {
   };
 
   const chooseView = (newView) => {
+    if (newView === 'apis') { openEndpointPortal(); return; }
     setView(newView);
     if (newView === 'explore' || newView === 'apis') {
       setActiveCategory('Semua');
@@ -828,9 +833,14 @@ function App() {
 
   const title = view === 'apis' ? 'Endpoint API' : view === 'saved' ? 'Snippet tersimpan' : activeCategory === 'Semua' ? 'Koleksi terbaru' : `Koleksi ${activeCategory}`;
 
-  const openApiDocs = () => {
+  const openEndpointPortal = () => {
     window.history.pushState({}, '', '/api-doc');
     setRoute('/api-doc');
+    setMobileNavOpen(false);
+  };
+  const openAdmin = () => {
+    window.history.pushState({}, '', '/admin');
+    setRoute('/admin');
     setMobileNavOpen(false);
   };
   const returnHome = () => {
@@ -838,8 +848,11 @@ function App() {
     setRoute('/');
   };
 
+  if (route === '/admin' || route === '/admin/') {
+    return <Suspense fallback={<div className="route-loading">Loading admin workspace…</div>}><AdminDashboard onPortal={openEndpointPortal} /></Suspense>;
+  }
   if (route === '/api-doc' || route === '/api-doc/') {
-    return <ApiDocs snippets={snippets} onHome={returnHome} onAddSnippet={() => { returnHome(); openAddSnippet('code'); }} />;
+    return <Suspense fallback={<div className="route-loading">Loading endpoint portal…</div>}><EndpointPortal onHome={returnHome} /></Suspense>;
   }
 
   return (
@@ -857,8 +870,8 @@ function App() {
           <button className={`nav-item ${view === 'explore' ? 'active' : ''}`} onClick={() => chooseView('explore')}><Code2 size={17} /><span>Jelajahi</span><span className="nav-count">{snippets.length}</span></button>
           <button className={`nav-item ${view === 'saved' ? 'active' : ''}`} onClick={() => chooseView('saved')}><Bookmark size={17} /><span>Tersimpan</span><span className="nav-count">{favorites.length}</span></button>
           <button className={`nav-item ${view === 'terminal' ? 'active' : ''}`} onClick={() => chooseView('terminal')}><Terminal size={17} /><span>Terminal status</span><span className="nav-live" /></button>
-          <button className={`nav-item ${view === 'apis' ? 'active' : ''}`} onClick={() => chooseView('apis')}><Plug size={17} /><span>Endpoint API</span><span className="nav-count">{snippets.filter((snippet) => snippet.apiPreview).length}</span></button>
-          <button className="nav-item" onClick={openApiDocs}><BookOpen size={17} /><span>Dokumentasi API</span><ArrowUpRight size={13} className="api-nav-arrow" /></button>
+          <button className={`nav-item ${route === '/api-doc' ? 'active' : ''}`} onClick={openEndpointPortal}><Plug size={17} /><span>Endpoint portal</span><ArrowUpRight size={13} className="api-nav-arrow" /></button>
+          <button className={`nav-item ${route === '/admin' ? 'active' : ''}`} onClick={openAdmin}><ShieldCheck size={17} /><span>Admin dashboard</span><ArrowUpRight size={13} className="api-nav-arrow" /></button>
         </nav>
 
         <div className="sidebar-section-label category-label">KATEGORI <button aria-label="Tambah snippet" onClick={() => openAddSnippet('code')}><Plus size={14} /></button></div>

@@ -1,60 +1,72 @@
 # SnippetVault — Van313 | Official
 
-Perpustakaan snippet kode dengan pencarian, kategori/bahasa, favorit, tambah snippet, salin/unduh/bagikan, halaman detail, dokumentasi REST API publik, live API playground, dan preflight kode statis. Dibangun dengan React + Vite, ikon Lucide, serta siap di-build/deploy ke Vercel.
+SnippetVault menggabungkan perpustakaan kode yang sudah ada dengan **Endpoint Portal** responsif: katalog berdasarkan kategori, pencarian, detail endpoint, form parameter dinamis, playground/output preview, serta code generator JavaScript, Python, PHP, dan cURL. Data endpoint dan kategori tersimpan di Supabase; katalog endpoint sengaja dimulai tanpa endpoint contoh. Admin mengelolanya melalui Supabase Auth dan dashboard terlindungi di `/admin`.
 
 ## Jalankan lokal
 
 ```bash
 npm install
+cp .env.example .env.local
+# Isi URL dan anon key project Supabase di .env.local
 npm run dev
 ```
 
-Build produksi:
+Gunakan `npm run build` untuk pemeriksaan produksi. `npm run preview` menyajikan build lokal. Supabase Functions/playground proxy berjalan penuh setelah deploy ke Vercel; pada Vite lokal proxy API belum berjalan dan playground hanya dapat mencoba fallback browser yang bergantung pada CORS endpoint.
 
-```bash
-npm run build
-npm run preview
-```
+## Supabase: database dan admin pertama
 
-Buka halaman API docs di `/api-doc`.
+1. Buat project Supabase.
+2. Buka **SQL Editor** dan jalankan seluruh `supabase/schema.sql`. Ini membuat `endpoint_categories`, `endpoint_admins`, `api_endpoints`, trigger `updated_at`, indeks, dan RLS. Hanya kategori dasar yang di-seed; **tidak ada record endpoint/API contoh**.
+3. Schema menambahkan folder dasar (termasuk AI/Claude AI, Anime/Otakudesu, AIO, Music) tanpa endpoint/API contoh. Di **Authentication → Users**, buat/invite akun admin dan salin UUID user tersebut.
+4. Di SQL Editor, daftarkan UUID itu:
+
+   ```sql
+   insert into public.endpoint_admins (user_id)
+   values ('UUID_USER_ADMIN');
+   ```
+
+5. Isi environment variables lokal dan Vercel seperti contoh di `.env.example`.
+6. Masuk di `https://domain-anda/admin`. Buat/edit/hapus kategori dan endpoint dari dashboard.
+
+Dashboard tidak menyediakan registrasi publik. Supabase Auth memvalidasi sesi; policy RLS hanya mengizinkan user yang ada di `endpoint_admins` melakukan perubahan. **Jangan** masukkan service-role key ke browser atau repository. Client menggunakan anon key dan RLS.
+
+### Field endpoint
+
+Form admin mencakup nama, slug, method (GET/POST/PUT/DELETE), kategori/folder dan parent folder, subfolder, path, description, output type, example URL HTTPS, definisi parameter (nama, tipe, wajib, deskripsi, default), kebutuhan API key/nama/deskripsi, sample response opsional, sort order, serta status public/active. Katalog publik hanya membaca endpoint yang `is_public` dan `is_active`.
+
+API key provider hanya dimasukkan pemakai ketika menjalankan playground dan tidak disimpan di record endpoint. `key_param_name` dan `key_description` hanyalah metadata petunjuk input.
 
 ## Deploy ke Vercel
 
-1. Push project ke GitHub.
-2. Di Vercel, pilih **Add New → Project** lalu import repo.
-3. Framework preset: **Vite** (atau biarkan auto-detect). Build command `npm run build`, output directory `dist`.
-4. Deploy. Fungsi di `api/` tersedia sebagai Vercel Functions.
+1. Push project ke GitHub dan import repository di Vercel.
+2. Pilih preset **Vite**, build command `npm run build`, output directory `dist`.
+3. Tambahkan environment variables berikut untuk Preview dan Production:
+   - `VITE_SUPABASE_URL`
+   - `VITE_SUPABASE_ANON_KEY`
+   - `SUPABASE_URL`
+   - `SUPABASE_ANON_KEY`
+4. Jalankan deploy. `vercel.json` mengarahkan `/api-doc` dan `/admin` ke aplikasi SPA; file di `api/` berjalan sebagai Vercel Functions.
+5. Jalankan SQL schema dan daftarkan admin sebelum menguji katalog/playground.
 
-Tidak ada API key yang dibutuhkan untuk API snippet publik.
+## Endpoint publik
 
-## REST API publik
+- `GET /api/v1/endpoints?q=anime&category=anime&method=GET&limit=50&offset=0` — katalog dan kategori aktif.
+- `GET /api/v1/endpoints/:slug` — detail endpoint publik.
+- `POST /api/execute` — proxy playground. Terima multipart form dengan `endpointId`, object JSON `params`, dan file parameter opsional.
+- Endpoint lama `/api/v1/snippets` dan `/api/check` tetap dipertahankan untuk snippet library/preflight.
 
-Semua endpoint read-only, JSON, dan mengizinkan CORS:
+Proxy playground hanya mengambil endpoint aktif dan publik dari Supabase; ia menolak URL non-HTTPS, jaringan privat, port non-443, redirect, dan respons lebih dari 6 MB. Batas upload 5 MB, timeout 20 detik, maksimal 20 eksekusi per menit per IP (rate-limit in-memory pada instance Vercel). Ini bukan kuota/tagihan per-user. Jangan daftarkan endpoint pihak ketiga tanpa hak untuk menggunakannya.
 
-- `GET /api/v1/snippets?q=fetch&category=API&language=javascript&tag=api&limit=10&offset=0`
-- `GET /api/v1/snippets/:slug`
-- `GET /api/health`
-- `POST /api/check` — preflight statis kode; bukan runtime execution.
+## Snippet library & terminal
 
-Endpoint daftar menyaring judul/deskripsi/slug/tag serta mendukung filter kategori, bahasa, tag, pagination (maksimal `limit=50`). Endpoint detail menyertakan source code. API awal mengembalikan enam snippet demo terkurasi dari `src/data.js`.
+- Pencarian, kategori/bahasa, favorit, snippet lokal, halaman detail, salin/unduh, dan tema terang/gelap.
+- Terminal menyediakan `help`, `list`, `check <id|all>`, `search`, `status`, dan `clear`. Perintah `run` sengaja dinonaktifkan.
+- Preflight hanya pemeriksaan statis/parse terbatas; kode snippet tidak dieksekusi dan hasilnya bukan jaminan runtime.
+- Migrasi baca lokal membuang item lama berlabel `API`/`apiPreview` dari `localStorage` yang tersimpan. Snippet non-API tetap dipertahankan.
 
-## Fitur
+## Catatan keamanan
 
-- Cari snippet menurut judul, deskripsi, bahasa, tag, atau kategori.
-- Filter kategori dan bahasa, sort terbaru/populer, bookmark/favorit.
-- Tambah snippet dengan judul, bahasa, tag, source URL, dan kode.
-- Detail snippet dengan syntax highlighting, copy, download, dan share URL.
-- Workspace **Endpoint API**: filter Anime/Otakudesu, AI/Claude, AIO, Music, atau lainnya; tambahkan URL, method, request body, dan sample response JSON.
-- Setiap endpoint punya panel preview: sample JSON tetap bisa dilihat, tombol request live menampilkan HTTP status/JSON, dan `data.results` dirender sebagai kartu hasil bila ada.
-- Halaman `/api-doc` bergaya mobile-first seperti API reference, contoh cURL, tombol salin, live request tester (hasil HTTP/JSON dan TRUE/FALSE), dan pemeriksaan kode statis real-time.
-- Tema terang/gelap, desain responsif, akses keyboard dasar.
-
-## Penyimpanan
-
-Tanpa konfigurasi database, snippet, endpoint API, dan favorit baru disimpan di `localStorage` browser. Artinya, data itu hanya terlihat pada browser/perangkat yang menyimpannya. API publik hanya membaca seed snippets di `src/data.js`. Untuk katalog bersama berisi data impor/scrape yang berizin, hubungkan Supabase/Postgres atau database lain, lalu tambahkan autentikasi dan kebijakan akses sebelum publikasi. Header/kunci yang dimasukkan di panel preview hanya berada di memori halaman saat itu, tidak disimpan ke koleksi.
-
-## Terminal & keamanan
-
-Terminal dan halaman API docs hanya melakukan **preflight statis**: memeriksa apakah source tersedia, mencoba parse-only untuk JavaScript sederhana/module, mencari placeholder umum, dan memberi peringatan pola berisiko. Snippet **tidak pernah dieksekusi** di browser/server. Status `TRUE` berarti lolos preflight awal, bukan jaminan kode aktif di runtime atau layanan eksternal.
-
-Jika mengimpor snippet dari internet, cantumkan sumber dan lisensinya. Hindari scraper yang melewati proteksi situs; gunakan API resmi atau izin pemilik sumber.
+- Simpan data admin melalui Supabase Auth + RLS; jangan mematikan RLS atau menaruh service-role key di frontend.
+- Hindari API key di URL, sample response, kode yang dicopy, dan screenshot. Gunakan key sementara di playground.
+- Browser preview memerlukan CORS yang sesuai jika fungsi Vercel belum tersedia.
+- Data provider/endpoint dari internet perlu sumber, izin, dan lisensi yang jelas; jangan bypass proteksi anti-bot tanpa izin.
